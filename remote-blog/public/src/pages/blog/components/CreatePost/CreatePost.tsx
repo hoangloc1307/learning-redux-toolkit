@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { RootState } from 'store'
 import { Post } from 'types/post.type'
-import { addPost, cancelEditingPost, finishEditingPost } from '../../blog.reducer'
+import { addPost, cancelEditingPost, finishEditingPost } from '../../blog.slice'
 
 const initialState: Post = {
   id: '',

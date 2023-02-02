@@ -1,4 +1,4 @@
-import { createAction, createReducer } from '@reduxjs/toolkit'
+import { createAction, createReducer, current, nanoid } from '@reduxjs/toolkit'
 import { initialPostList } from 'constants/blog'
 import { Post } from 'types/post.type'
 
@@ -12,7 +12,14 @@ const initialState: BlogState = {
   editingPost: null
 }
 
-export const addPost = createAction<Post>('blog/addPost')
+export const addPost = createAction('blog/addPost', function (post: Omit<Post, 'id'>) {
+  return {
+    payload: {
+      ...post,
+      id: nanoid()
+    }
+  }
+})
 export const deletePost = createAction<string>('blog/deletePost')
 export const startEditingPost = createAction<string>('blog/startEditingPost')
 export const cancelEditingPost = createAction('blog/cancelEditingPost')
@@ -27,6 +34,9 @@ const blogReducer = createReducer(initialState, (builder) => {
       const postIndex = state.postList.findIndex((post) => post.id === action.payload)
       if (postIndex !== -1) {
         state.postList.splice(postIndex, 1)
+      }
+      if (state.editingPost) {
+        state.editingPost = null
       }
     })
     .addCase(startEditingPost, (state, action) => {
@@ -44,7 +54,15 @@ const blogReducer = createReducer(initialState, (builder) => {
         }
         return false
       })
+      state.editingPost = null
     })
+    .addMatcher(
+      (action) => action.type.includes('cancel'),
+      (state, action) => {
+        console.log(current(state))
+        console.log(action)
+      }
+    )
 })
 
 export default blogReducer
