@@ -1,67 +1,68 @@
-import { unwrapResult } from '@reduxjs/toolkit'
-import { useEffect, useState } from 'react'
+import classNames from 'classnames'
+import { useAddPostMutation, useGetPostQuery, useUpdatePostMutation } from 'pages/blog/blog.service'
+import { useEffect, useMemo, useState } from 'react'
 import { useSelector } from 'react-redux'
-import { RootState, useAppDispatch } from 'store'
+import { RootState } from 'store'
 import { Post } from 'types/post.type'
-import { addPost, cancelEditingPost, updatePost } from '../../blog.slice'
+import { isEntityError } from 'utils/helper'
 
-interface FormError {
-  publishDate: string
-}
+// interface FormError {
+//   description: string
+//   featuredImage: string
+//   publishDate: string
+//   published: boolean
+//   title: string
+// }
 
-const initialState: Post = {
-  id: '',
-  title: '',
+const initialState: Omit<Post, 'id'> = {
   description: '',
   featuredImage: '',
   publishDate: '',
-  published: false
+  published: false,
+  title: ''
 }
 
+type FormError = { [key in keyof typeof initialState]: string } | null
+
 export default function CreatePost() {
-  const [formData, setFormData] = useState<Post>(initialState)
-  const [formError, setFormError] = useState<FormError | null>(null)
-  const dispatch = useAppDispatch()
-  const editingPost = useSelector((state: RootState) => state.blog.editingPost)
-  // const loading = useSelector((state: RootState) => state.blog.loading)
+  const [formData, setFormData] = useState<Omit<Post, 'id'> | Post>(initialState)
+  const [addPost, addPostResult] = useAddPostMutation()
+  const [updatePost, updatePostResult] = useUpdatePostMutation()
+  const postId = useSelector((state: RootState) => state.blog.postId)
+  const { data } = useGetPostQuery(postId, {
+    skip: !postId
+  })
+
+  const formError: FormError = useMemo(() => {
+    const errorResult = postId ? updatePostResult.error : addPostResult.error
+    if (isEntityError(errorResult)) {
+      return errorResult.data.error as FormError
+    }
+    return null
+  }, [postId, updatePostResult, addPostResult])
 
   useEffect(() => {
-    setFormData(editingPost || initialState)
-  }, [editingPost])
+    if (data) {
+      setFormData(data)
+    }
+  }, [data])
 
-  const handleSumit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (editingPost) {
-      dispatch(updatePost({ id: editingPost.id, body: formData }))
-        .unwrap()
-        .then(() => {
-          setFormData(initialState)
-          if (formError) {
-            setFormError(null)
-          }
-        })
-        .catch((err) => {
-          setFormError(err.error)
-        })
-    } else {
-      try {
-        await dispatch(addPost(formData)).unwrap()
-        setFormData(initialState)
-        if (formError) {
-          setFormError(null)
-        }
-      } catch (err: any) {
-        setFormError(err.error)
+    try {
+      if (postId) {
+        await updatePost({ id: postId, body: formData as Post }).unwrap()
+      } else {
+        await addPost(formData).unwrap()
       }
+      setFormData(initialState)
+    } catch (error) {
+      console.error('rejected', error)
     }
   }
 
-  const handleCancel = () => {
-    dispatch(cancelEditingPost())
-  }
-
   return (
-    <form onSubmit={handleSumit} onReset={handleCancel}>
+    <form onSubmit={handleSubmit}>
       <div className='mb-6'>
         <label htmlFor='title' className='mb-2 block text-sm font-medium text-gray-900 dark:text-gray-300'>
           Title
@@ -109,27 +110,29 @@ export default function CreatePost() {
       <div className='mb-6'>
         <label
           htmlFor='publishDate'
-          className={`mb-2 block text-sm font-medium dark:text-gray-300 ${
-            formError?.publishDate ? 'text-red-700' : 'text-gray-900'
-          }`}
+          className={classNames('mb-2 block text-sm font-medium  dark:text-gray-300', {
+            'text-red-700': formError?.publishDate,
+            'text-gray-900': !formError?.publishDate
+          })}
         >
           Publish Date
         </label>
         <input
           type='datetime-local'
           id='publishDate'
-          className={`block w-56 rounded-lg border  p-2.5 text-sm focus:outline-none ${
-            formError?.publishDate
-              ? 'border-red-500 bg-red-50 text-red-700 placeholder-red-700 focus:border-red-500 focus:ring-red-500'
-              : 'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500'
-          }`}
+          className={classNames('block w-56 rounded-lg border  p-2.5 text-sm  focus:outline-none ', {
+            'border-red-500 bg-red-50 text-red-900 placeholder-red-700 focus:border-red-500 focus:ring-red-500':
+              formError?.publishDate,
+            'border-gray-300 bg-gray-50 text-gray-900 focus:border-blue-500 focus:ring-blue-500':
+              !formError?.publishDate
+          })}
           placeholder='Title'
           required
           value={formData.publishDate}
           onChange={(e) => setFormData((prev) => ({ ...prev, publishDate: e.target.value }))}
         />
         {formError?.publishDate && (
-          <p className='mt-2 text-sm text-red-600'>
+          <p className='mt-2 text-sm text-red-500'>
             <span className='font-medium'>Lỗi! </span>
             {formError.publishDate}
           </p>
@@ -148,7 +151,18 @@ export default function CreatePost() {
         </label>
       </div>
       <div>
-        {editingPost && (
+        {!postId && (
+          <button
+            className='group relative inline-flex items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-purple-600 to-blue-500 p-0.5 text-sm font-medium text-gray-900 hover:text-white focus:outline-none focus:ring-4 focus:ring-blue-300 group-hover:from-purple-600 group-hover:to-blue-500 dark:text-white dark:focus:ring-blue-800'
+            type='submit'
+          >
+            <span className='relative rounded-md bg-white px-5 py-2.5 transition-all duration-75 ease-in group-hover:bg-opacity-0 dark:bg-gray-900'>
+              Publish Post
+            </span>
+          </button>
+        )}
+
+        {postId && (
           <>
             <button
               type='submit'
@@ -167,16 +181,6 @@ export default function CreatePost() {
               </span>
             </button>
           </>
-        )}
-        {!editingPost && (
-          <button
-            className='group relative inline-flex items-center justify-center overflow-hidden rounded-lg bg-gradient-to-br from-purple-600 to-blue-500 p-0.5 text-sm font-medium text-gray-900 hover:text-white focus:outline-none focus:ring-4 focus:ring-blue-300 group-hover:from-purple-600 group-hover:to-blue-500 dark:text-white dark:focus:ring-blue-800'
-            type='submit'
-          >
-            <span className='relative rounded-md bg-white px-5 py-2.5 transition-all duration-75 ease-in group-hover:bg-opacity-0 dark:bg-gray-900'>
-              Publish Post
-            </span>
-          </button>
         )}
       </div>
     </form>
